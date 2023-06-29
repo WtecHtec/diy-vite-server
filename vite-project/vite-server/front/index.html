@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vite + Vue + Express</title>
+</head>
+
+<body>
+  <div id="app"></div>
+  <script>
+    window.process = {
+      env: {
+        NODE_ENV: 'production'
+      }
+    }
+    const sheetsMap = new Map()
+    let lastInsertedStyle;
+    function removeStyle(id) {
+      const style = sheetsMap.get(id);
+      if (style) {
+        document.head.removeChild(style);
+        sheetsMap.delete(id);
+      }
+    }
+
+    function updateStyle(id, content) {
+      let style = sheetsMap.get(id);
+      if (!style) {
+        style = document.createElement('style');
+        style.setAttribute('type', 'text/css');
+        style.setAttribute('data-vite-dev-id', id);
+        style.textContent = content;
+        if (!lastInsertedStyle) {
+          document.head.appendChild(style);
+          // reset lastInsertedStyle after async
+          // because dynamically imported css will be splitted into a different file
+          setTimeout(() => {
+            lastInsertedStyle = undefined;
+          }, 0);
+        }
+        else {
+          lastInsertedStyle.insertAdjacentElement('afterend', style);
+        }
+        lastInsertedStyle = style;
+      }
+      else {
+        style.textContent = content;
+      }
+      sheetsMap.set(id, style);
+    }
+  </script>
+  <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>
