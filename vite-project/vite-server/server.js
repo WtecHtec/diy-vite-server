@@ -3,13 +3,17 @@ const path = require('path');
 const fs = require('fs')
 const compilerSFC = require('@vue/compiler-sfc')
 const compilerDOM = require('@vue/compiler-dom')
+const uuid = require('uuid');
 const app = express()
 const port = 3000
+
+let __scopeId = `data-v-${uuid.v4().split('-')[0]}`;
+console.log(__scopeId);
 
 app.get('*', (req, res) => {
   console.log(req.path, req.query)
   // const { url } = req.query
-  const { type } = req.query
+  const { type, scopeId } = req.query
   const reqPath = req.path
   if (reqPath === '/' || !reqPath) {
     // 加载静态html
@@ -41,19 +45,22 @@ app.get('*', (req, res) => {
     // 加载组件
     const componentPath = path.resolve(__dirname,`./front/${reqPath}` )
     const componentData = fs.readFileSync(componentPath, 'utf-8')
-    const sfcData = compilerSFC.parse(componentData)
+    const sfcData = compilerSFC.parse(componentData,)
     console.log(`sfcData===:`)
     console.log(sfcData)
 
     // 加载组件 script 内容
     if (!type) {
+      __scopeId = `data-v-${uuid.v4().split('-')[0]}`;
       const scriptContent = sfcData.descriptor.script.content
       const script = scriptContent.replace('export default ', 'const __script = ')
       res.setHeader('Content-Type', 'application/javascript');
       return res.send(`${fromatImport(script)}
+        import '${reqPath}?type=style&scopeId=${__scopeId}';
         // 解析tpl 模板
-        import { render as __render } from '${reqPath}?type=tpl';
+        import { render as __render } from '${reqPath}?type=tpl&scopeId=${__scopeId}';
         __script.render = __render
+        __script.__scopeId = '${__scopeId}'
         export default __script
       `)
     }
@@ -63,6 +70,25 @@ app.get('*', (req, res) => {
       const render = compilerDOM.compile(templateContent, { mode: 'module'}).code
       res.setHeader('Content-Type', 'application/javascript');
       return res.send(fromatImport(render))
+    }
+
+    if (type === 'style') {
+      const templateContent = sfcData.descriptor.styles
+      const styleData = compilerSFC.compileStyle({
+        source: templateContent[0].content,
+        scoped: true,
+        id: scopeId,
+      }).code
+      console.log('style')
+      console.log(styleData)
+      const __vite__id = reqPath;
+      // console.log(templateContent[0])
+      res.setHeader('Content-Type', 'application/javascript');
+      return res.send(`
+      const __style__ = \`${styleData}\`;
+      removeStyle('${__vite__id}');
+      updateStyle('${__vite__id}', \`${styleData.toString()}\`);
+      export default __style__;`)
     }
   
   }  else if (reqPath.indexOf('.css') > -1) {
@@ -78,9 +104,12 @@ app.get('*', (req, res) => {
       updateStyle('${__vite__id}', \`${cssData.toString()}\`);
       export default __vite__css;
     `)
-  } 
-  res.setHeader('Content-Type', 'application/javascript');
-  return res.send(`export default { __path___: '404: ${reqPath}'}  ` )
+  } else if (reqPath.endsWith('.svg') > -1) {
+    return res.sendFile(path.resolve(__dirname, `./front/${reqPath}`))
+  } else {
+    res.setHeader('Content-Type', 'application/javascript');
+    return res.send(`export default { __path___: '404: ${reqPath}'}  ` )
+  }
 })
 
 /**
